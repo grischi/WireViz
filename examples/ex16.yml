@@ -1,0 +1,44 @@
+connectors:
+  X1:
+    type: Stecker 
+    pincount: 3
+  X2:
+    type: Stecker
+    pincount: 3
+
+conduits:
+  C1:
+    type: Wellschlauch
+
+
+cables:
+  W1:
+    category: bundle
+    gauge: 1.0 mm2
+    length: 1.0 m
+    colors: [YE, BU]
+  W2:
+    gauge: 1.0 mm2
+    length: 1.0 m 
+    colors: [RD]
+
+connections:
+  -
+    - X1: [1-2]
+    - W1: [1-2]
+    - X2: [1-2]
+  -
+    - X1: [3]
+    - W2
+    - X2: [3]
+
+conduits:
+  C1:
+    cables: [W1, W2]
+    length: 1.0 m
+
+conduit-connections:
+  -
+    - X1
+    - C1
+    - X2
