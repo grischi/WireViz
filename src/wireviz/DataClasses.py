@@ -421,10 +421,24 @@ class Cable:
 class Conduit(Cable):
     cables: List[Cable] = field(default_factory=list)
     ports: int = 0
+    cableports: dict[str] = field(default_factory=dict)
 
-    def add_port(self, color: Color) -> int:
+    def get_port(self, cable: Cable, port: int) -> int:
+        conduit_port = None
+        if cable.name in self.cableports:
+            if len(self.cableports[cable.name]) >= port:
+                conduit_port = self.cableports[cable.name][port - 1]
+        else:
+            self.cableports[cable.name] = []
+
+        if conduit_port:
+            return conduit_port
+        else:
+            self.cableports[cable.name].extend([0] * (port - len(self.cableports[cable.name])))
+
         self.ports = self.ports + 1
-        self.colors.append(color)
+        self.cableports[cable.name][port - 1] = self.ports
+        self.colors.append(cable.colors[port - 1])
         return self.ports
 
 

@@ -511,8 +511,8 @@ class Harness:
                         ]
                     else:
                         for conduitname in cable.conduits:
-                            conduit = self.conduits[conduitname]
-                            code_left_2 = f"{conduit.name}:w{conduit.add_port(cable.colors[connection.via_port - 1])}:w"
+                            conduitport = self.conduits[conduitname].get_port(cable, connection.via_port)
+                            code_left_2 = f"{conduitname}:w{conduitport}:w"
                             dot.edge(code_left_1, code_left_2)
                             if from_connector.show_name:
                                 from_info = [
@@ -558,7 +558,8 @@ class Harness:
                         ]
                     else:
                         conduit = self.conduits[cable.conduits[-1]]
-                        code_right_conduit = f"{conduit.name}:w{connection.via_port}:e"
+                        conduitport = conduit.get_port(cable, connection.via_port)
+                        code_right_conduit = f"{conduit.name}:w{conduitport}:e"
                         code_right_wire = f"{cable.name}:w{connection.via_port}:w"
 
                         dot.edge(code_right_conduit, code_right_wire)
