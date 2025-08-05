@@ -564,7 +564,7 @@ class Harness:
 
                         dot.edge(code_right_conduit, code_right_wire)
                         if to_connector.show_name:
-                            from_info = [
+                            to_info = [
                                 str(connection.to_name),
                                 str(connection.to_pin),
                             ]
@@ -582,7 +582,7 @@ class Harness:
 
                         dot.edge(code_right_wire[:-1] + 'e', code_right_2)
                         if to_connector.show_name:
-                            from_info = [
+                            to_info = [
                                 str(connection.to_name),
                                 str(connection.to_pin),
                             ]
