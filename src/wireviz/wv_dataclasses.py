@@ -814,6 +814,42 @@ class Cable(TopLevelGraphicalComponent):
 
 
 @dataclass
+class ConduitConnector(Connector):
+    pass
+
+
+@dataclass
+class Conduit(Cable):
+    """Protective conduit that can host cables; maps cable wires -> conduit ports."""
+    # store cable designators (strings) to avoid tight object coupling
+    cables: List[str] = field(default_factory=list)
+    ports: int = 0
+    cableports: Dict[str, List[int]] = field(default_factory=dict)
+
+    def get_port(self, cable_name: str, wire_index: int) -> int:
+        """Return conduit port number for (cable_name, wire_index), creating it lazily."""
+        if cable_name not in self.cableports:
+            self.cableports[cable_name] = []
+
+        # if already present and long enough, return existing
+        if len(self.cableports[cable_name]) >= wire_index:
+            existing = self.cableports[cable_name][wire_index - 1]
+            if existing:
+                return existing
+
+        # extend list if needed
+        if len(self.cableports[cable_name]) < wire_index:
+            self.cableports[cable_name].extend([0] * (wire_index - len(self.cableports[cable_name])))
+
+        # allocate new conduit port
+        self.ports += 1
+        self.cableports[cable_name][wire_index - 1] = self.ports
+        # record a placeholder color for rendering (to be set by harness when known)
+        self.colors.append("")
+        return self.ports
+
+
+@dataclass
 class MatePin:
     from_: PinClass
     to: PinClass
