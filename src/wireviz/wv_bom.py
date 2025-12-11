@@ -8,6 +8,8 @@ from typing import List, Optional, Union
 import tabulate as tabulate_module
 
 from wireviz.wv_utils import html_line_breaks
+from wireviz.wv_colors import MultiColor, ColorOutputMode
+import wireviz.wv_colors as _wv_colors
 
 BOM_HASH_FIELDS = "description qty_unit amount partnumbers"
 
@@ -95,6 +97,17 @@ def pn_info_string(
         return None
 
 
+def _format_color(color, mode):
+    if not color:
+        return ""
+    mc = MultiColor(color)
+    if (isinstance(mode, str) and mode.lower() == "hex") or (
+        isinstance(mode, ColorOutputMode) and "HTML_" in mode.name
+    ):
+        return mc.html
+    return str(mc)
+
+
 def bom_list(bom):
     headers = (
         "# Qty Unit Description Amount Unit Designators "
@@ -143,3 +156,68 @@ def print_bom_table(bom):
     print()
     print(tabulate_module.tabulate(bom_list(bom), headers="firstrow"))
     print()
+
+
+def index_if_list(value, index: int):
+    """Return the value indexed if it is a list, or simply the value otherwise."""
+    return value[index] if isinstance(value, list) else value
+
+
+def make_list(value):
+    """Return value if a list, empty list if None, or single element list otherwise."""
+    return value if isinstance(value, list) else [] if value is None else [value]
+
+
+def make_str(value):
+    """Return comma separated elements if a list, empty string if None, or value as a string otherwise."""
+    return ", ".join(str(element) for element in make_list(value))
+
+
+def generate_conduit_bom_entries(harness):
+    """Generate BOM entries for conduits in the harness.
+
+    This is a minimal, 1:1 inspired helper that returns a list of BOM entry
+    dicts for `harness.conduits` similar to how cables are handled.
+    """
+    bom_entries = []
+    for conduit in getattr(harness, "conduits", {}).values():
+        if getattr(conduit, "ignore_in_bom", False):
+            continue
+        # process conduit as a single entity
+        description = (
+            "Conduit"
+            + (f", {conduit.type}" if getattr(conduit, "type", None) else "")
+            + (
+                f", {conduit.gauge} {conduit.gauge_unit}"
+                if getattr(conduit, "gauge", None)
+                else ""
+            )
+                + (
+                f", {_format_color(conduit.color, harness.options.color_mode)}"
+                if getattr(conduit, "color", None)
+                else ""
+            )
+        )
+        bom_entries.append(
+            {
+                "description": description,
+                "qty": getattr(conduit, "length", None),
+                "unit": getattr(conduit, "length_unit", None),
+                "designators": getattr(conduit, "designator", None)
+                if getattr(conduit, "show_name", False)
+                else None,
+            }
+        )
+
+        # add conduit additional components if any
+        for part in getattr(conduit, "additional_components", []):
+            bom_entries.append(
+                {
+                    "description": part.description,
+                    "qty": part.qty,
+                    "unit": part.unit,
+                    "designators": conduit.designator if conduit.show_name else None,
+                }
+            )
+
+    return bom_entries

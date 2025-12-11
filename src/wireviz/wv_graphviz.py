@@ -56,7 +56,7 @@ def gv_node_component(component: Component) -> Table:
         line_info = [
             bom_bubble(component.bom_id) if component.category != "bundle" else None,
             html_line_breaks(component.type),
-            f"{component.wirecount}x" if component.show_wirecount else None,
+            (f"{component.wirecount}x" if (component.show_wirecount and component.wirecount is not None) else None),
             component.gauge_str_with_equiv,
             "+ S" if component.shield else None,
             component.length_str,

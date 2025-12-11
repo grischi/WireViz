@@ -24,6 +24,9 @@ from wireviz.wv_dataclasses import (
     Side,
     TopLevelGraphicalComponent,
     Tweak,
+    Conduit,
+    ConduitConnector,
+    WireClass,
 )
 from wireviz.wv_graphviz import (
     apply_dot_tweaks,
@@ -52,7 +55,9 @@ class Harness:
 
     def __post_init__(self):
         self.connectors = {}
+        self.conduit_connectors = {}
         self.cables = {}
+        self.conduits = {}
         self.mates = []
         self.bom = defaultdict(dict)
         self.additional_bom_items = []
@@ -65,6 +70,14 @@ class Harness:
     def add_cable(self, designator: str, *args, **kwargs) -> None:
         cbl = Cable(designator=designator, *args, **kwargs)
         self.cables[designator] = cbl
+
+    def add_conduit_connector(self, designator: str, *args, **kwargs) -> None:
+        conn = ConduitConnector(designator=designator, *args, **kwargs)
+        self.conduit_connectors[designator] = conn
+
+    def add_conduit(self, designator: str, *args, **kwargs) -> None:
+        cnd = Conduit(designator=designator, *args, **kwargs)
+        self.conduits[designator] = cnd
 
     def add_additional_bom_item(self, item: dict) -> None:
         new_item = AdditionalBomItem(**item)
@@ -226,6 +239,7 @@ class Harness:
         self,
         from_name: str,
         from_pin: Union[int, str],
+        conduits: Union[None, List[str]],
         via_name: str,
         via_wire: Union[int, str],
         to_name: str,
@@ -259,6 +273,9 @@ class Harness:
         # check via cable
         if via_name in self.cables:
             cable = self.cables[via_name]
+            # set conduits if provided (mirrors grischi behaviour)
+            if conduits:
+                cable.conduits = conduits
             # check if provided name is ambiguous
             if via_wire in cable.colors and via_wire in cable.wirelabels:
                 if cable.colors.index(via_wire) != cable.wirelabels.index(via_wire):
@@ -351,14 +368,89 @@ class Harness:
                 style=style,
             )
 
-            # generate wire edges between component nodes and cable nodes
+        # Pre-populate conduit ports/colors by scanning cable connections.
+        # This ensures conduit nodes have their ports/colors defined before
+        # Graphviz edges reference them.
+        for cable in self.cables.values():
+            for connection in cable._connections:
+                if not cable.conduits:
+                    continue
+                for conduitname in cable.conduits:
+                    if conduitname in self.conduits:
+                        conduit = self.conduits[conduitname]
+                        # allocate conduit port for this cable wire
+                        conduit.get_port(cable, connection.via.index + 1)
+
+        # Rebuild conduit wire_objects now that colors have been populated
+        from wireviz.wv_colors import MultiColor
+
+        for conduit in self.conduits.values():
+            conduit.wire_objects = {}
+            for wire_index, wire_color in enumerate(conduit.colors):
+                wid = wire_index + 1
+                conduit.wire_objects[wid] = WireClass(
+                    parent=conduit.designator,
+                    index=wire_index,
+                    id=wid,
+                    label=None,
+                    color=MultiColor(wire_color),
+                    type=conduit.type,
+                    subtype=conduit.subtype,
+                    gauge=conduit.gauge,
+                    length=conduit.length,
+                    sum_amounts_in_bom=conduit.sum_amounts_in_bom,
+                    ignore_in_bom=conduit.ignore_in_bom,
+                    partnumbers=conduit.partnumbers,
+                )
+
+        # generate conduit nodes now that ports and wire_objects are available
+        for conduit in self.conduits.values():
+            gv_html = gv_node_component(conduit)
+            gv_html.update_attribs(bgcolor=calculate_node_bgcolor(conduit, self.options))
+            style = "filled,dashed" if conduit.category == "bundle" else "filled"
+            dot.node(
+                conduit.designator,
+                label=f"<\n{gv_html}\n>",
+                shape="box",
+                style=style,
+            )
+
+        # Now generate wire edges between component nodes and cable nodes (after
+        # conduit nodes exist and ports have been allocated).
+        for cable in self.cables.values():
             for connection in cable._connections:
                 color, l1, l2, r1, r2 = gv_edge_wire(self, cable, connection)
                 dot.attr("edge", color=color)
+                # left side (from connector to via)
                 if not (l1, l2) == (None, None):
-                    dot.edge(l1, l2)
+                    if not cable.conduits:
+                        dot.edge(l1, l2)
+                    else:
+                        code_left_1 = l1
+                        # chain through all conduits assigned to this cable
+                        for conduitname in cable.conduits:
+                            conduit = self.conduits[conduitname]
+                            conduitport = conduit.get_port(cable, connection.via.index + 1)
+                            code_left_2 = f"{conduit.designator}:w{conduitport}:w"
+                            dot.edge(code_left_1, code_left_2)
+                            # prepare for next conduit in chain (switch side to 'e')
+                            code_left_1 = code_left_2[:-1] + "e"
+                # right side (via to connector)
                 if not (r1, r2) == (None, None):
-                    dot.edge(r1, r2)
+                    if not cable.conduits:
+                        dot.edge(r1, r2)
+                    else:
+                        # connect from last conduit to the cable wire, then to connector
+                        last_conduit = self.conduits[cable.conduits[-1]]
+                        conduitport = last_conduit.get_port(cable, connection.via.index + 1)
+                        code_right_conduit = f"{last_conduit.designator}:w{conduitport}:e"
+                        code_right_wire = f"{cable.designator}:w{connection.via.index+1}:w"
+
+                        dot.edge(code_right_conduit, code_right_wire)
+                        dot.edge(code_right_wire[:-1] + "e", r2)
+
+            # generate wire edges between component nodes and cable nodes
+            pass
 
         for mate in self.mates:
             color, dir, code_from, code_to = gv_edge_mate(mate)
